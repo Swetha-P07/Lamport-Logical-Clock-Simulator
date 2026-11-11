@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lamport Logical Clock Simulator</title>
+<style>
+:root{--navy:#14213d;--blue:#2563eb;--light:#eff6ff;--ink:#1f2937;--muted:#64748b;--line:#dbe3ef;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{background:linear-gradient(120deg,#14213d,#1d4ed8);color:white;padding:28px 18px;text-align:center}
+header h1{margin:0 0 6px;font-size:clamp(23px,5vw,34px)}header p{margin:0;color:#dbeafe}
+main{max-width:1050px;margin:22px auto;padding:0 14px 40px}.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 3px 12px #0f172a0a}
+h2{font-size:19px;color:var(--navy);margin:0 0 12px}.processes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.process{background:var(--light);border:1px solid #bfdbfe;border-radius:12px;text-align:center;padding:13px}.process strong{display:block;color:#1d4ed8;font-size:17px}.clock{font-size:27px;font-weight:750;color:var(--navy)}
+.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;font-weight:650;font-size:13px;margin-bottom:5px;color:#334155}
+select,input{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:8px;background:white;font:inherit;color:var(--ink)}
+button{border:0;border-radius:9px;padding:11px 15px;background:var(--blue);color:white;font-weight:700;font-size:14px;cursor:pointer}
+button.secondary{background:#e2e8f0;color:#1e293b}button.danger{background:#fee2e2;color:#991b1b}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:13px}
+.note{font-size:13px;color:var(--muted);margin:8px 0 0}.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:650px}th,td{padding:10px 9px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}th{background:#f8fafc;color:#334155}
+.pill{display:inline-block;border-radius:30px;padding:3px 9px;background:#e0ecff;color:#1d4ed8;font-weight:700;font-size:12px}
+.empty{text-align:center;color:var(--muted);padding:24px}.result{background:#f0fdf4;border:1px solid #bbf7d0;padding:11px;border-radius:9px;color:#166534;margin-top:12px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:15px}
+@media(max-width:600px){.controls{grid-template-columns:1fr}.processes{gap:6px}.process{padding:10px 5px}.clock{font-size:23px}.panel{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lamport Logical Clock Simulator</h1>
+  <p>Distributed Systems Mini Project · Three-process event ordering</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>1. Process Logical Clocks</h2>
+    <div class="processes" id="clocks">
+      <div class="process"><strong>Process P1</strong><span class="clock" id="clock-P1">0</span><div class="note">Logical clock</div></div>
+      <div class="process"><strong>Process P2</strong><span class="clock" id="clock-P2">0</span><div class="note">Logical clock</div></div>
+      <div class="process"><strong>Process P3</strong><span class="clock" id="clock-P3">0</span><div class="note">Logical clock</div></div>
+    </div>
+    <p class="note">Each process has an independent logical clock. Clocks change when events occur.</p>
+  </section>
+
+  <section class="panel">
+    <h2>2. Generate an Event</h2>
+    <div class="controls">
+      <div><label for="process">Process</label><select id="process"><option>P1</option><option>P2</option><option>P3</option></select></div>
+      <div><label for="eventType">Event type</label><select id="eventType"><option value="Internal">Internal event</option><option value="Send">Send message</option><option value="Receive">Receive message</option></select></div>
+      <div id="peerWrap"><label for="peer">Other process</label><select id="peer"><option>P1</option><option>P2</option><option>P3</option></select></div>
+      <div id="messageWrap"><label for="message">Message name</label><input id="message" value="M1" maxlength="20"></div>
+      <div id="pendingWrap" style="display:none"><label for="pending">Message to receive</label><select id="pending"></select></div>
+      <div><label for="description">Description (optional)</label><input id="description" placeholder="e.g. Update local data"></div>
+    </div>
+    <div class="actions"><button id="addBtn">Add Event</button><button class="secondary" id="sampleBtn">Load Sample Demonstration</button><button class="danger" id="resetBtn">Reset Simulator</button></div>
+    <p class="note">Receive events are generated from messages already sent. The receiver clock becomes max(receiver clock, message timestamp) + 1.</p>
+    <div id="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <h2>3. Event Log — Execution Order</h2>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Process</th><th>Event</th><th>Logical time</th><th>Details</th></tr></thead><tbody id="eventRows"><tr><td colspan="5" class="empty">No events yet. Add an event or load the sample demonstration.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>4. Consistent Logical Ordering</h2>
+    <p class="note">Events are sorted by Lamport timestamp, then process ID as a deterministic tie-breaker. Equal timestamps do not necessarily mean events are causally related.</p>
+    <div class="table-wrap"><table><thead><tr><th>Order</th><th>Process</th><th>Event</th><th>Timestamp</th><th>Details</th></tr></thead><tbody id="orderedRows"><tr><td colspan="5" class="empty">The ordered event list will appear here.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>5. Lamport Clock Rules</h2>
+    <ol>
+      <li>Initially, every process clock is 0.</li>
+      <li>For an internal event, increment the local clock by 1.</li>
+      <li>For a send event, increment the sender clock by 1 and attach that timestamp to the message.</li>
+      <li>For a receive event carrying timestamp T, set clock = max(local clock, T) + 1.</li>
+      <li>Sort the event list by timestamp; use process ID to break display ties.</li>
+    </ol>
+  </section>
+</main>
+<footer>Lamport Logical Clock Simulator · Distributed Systems Mini Project</footer>
+<script>
+const clocks={P1:0,P2:0,P3:0};
+let events=[],messages=[],eventNo=0,messageNo=0;
+const $=id=>document.getElementById(id);
+const processNames=["P1","P2","P3"];
+function updateControls(){
+ const type=$("eventType").value;
+ $("peerWrap").style.display=type==="Internal"?"none":"block";
+ $("messageWrap").style.display=type==="Send"?"block":"none";
+ $("pendingWrap").style.display=type==="Receive"?"block":"none";
+ refreshPending();
+}
+function refreshPending(){
+ const receiver=$("process").value,select=$("pending"),old=select.value;
+ const available=messages.filter(m=>m.to===receiver&&!m.received);
+ select.innerHTML="";
+ if(!available.length){const o=document.createElement("option");o.textContent="No pending messages";o.value="";select.appendChild(o)}
+ available.forEach(m=>{const o=document.createElement("option");o.value=m.id;o.textContent=`${m.name} from ${m.from} (timestamp ${m.timestamp})`;select.appendChild(o)});
+ if([...select.options].some(o=>o.value===old))select.value=old;
+}
+function record(process,type,details,timestamp){
+ events.push({id:++eventNo,process,type,details,timestamp});
+}
+function render(){
+ processNames.forEach(p=>$("clock-"+p).textContent=clocks[p]);
+ const row=(e,i)=>`<tr><td>${i+1}</td><td><b>${e.process}</b></td><td><span class="pill">${e.type}</span></td><td><b>${e.timestamp}</b></td><td>${escapeHtml(e.details)}</td></tr>`;
+ $("eventRows").innerHTML=events.length?events.map(row).join(""):'<tr><td colspan="5" class="empty">No events yet.</td></tr>';
+ const sorted=[...events].sort((a,b)=>a.timestamp-b.timestamp||a.process.localeCompare(b.process));
+ $("orderedRows").innerHTML=sorted.length?sorted.map(row).join(""):'<tr><td colspan="5" class="empty">The ordered event list will appear here.</td></tr>';
+ refreshPending();
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function addEvent(){
+ const p=$("process").value,type=$("eventType").value,peer=$("peer").value;
+ if(type!=="Internal"&&p===peer){showStatus("Choose two different processes for message communication.",true);return}
+ if(type==="Internal"){
+  clocks[p]++;record(p,"Internal",$("description").value.trim()||"Internal event",clocks[p]);
+ }else if(type==="Send"){
+  clocks[p]++;const name=$("message").value.trim()||`M${messageNo+1}`;
+  const msg={id:++messageNo,name,from:p,to:peer,timestamp:clocks[p],received:false};
+  messages.push(msg);record(p,"Send",`${name} to ${peer}` ,clocks[p]);
+ }else{
+  const id=Number($("pending").value),msg=messages.find(m=>m.id===id&&!m.received);
+  if(!msg){showStatus("There is no pending message for this process. Send a message first.",true);return}
+  clocks[p]=Math.max(clocks[p],msg.timestamp)+1;msg.received=true;
+  record(p,"Receive",`${msg.name} from ${msg.from}`,$("description").value.trim()?clocks[p]:clocks[p]);
+ }
+ render();showStatus("Event added successfully.",false);
+}
+function showStatus(msg,error){$("status").innerHTML=`<div class="${error?"":"result"}" style="${error?"color:#991b1b;background:#fef2f2;border:1px solid #fecaca;padding:10px;border-radius:8px;margin-top:12px":""}">${escapeHtml(msg)}</div>`}
+function reset(){processNames.forEach(p=>clocks[p]=0);events=[];messages=[];eventNo=0;messageNo=0;$("description").value="";render();$("status").innerHTML="";}
+function sample(){
+ reset();
+ function internal(p,d){clocks[p]++;record(p,"Internal",d,clocks[p])}
+ function send(from,to,name){clocks[from]++;let m={id:++messageNo,name,from,to,timestamp:clocks[from],received:false};messages.push(m);record(from,"Send",`${name} to ${to}`,clocks[from]);return m}
+ function receive(p,m){clocks[p]=Math.max(clocks[p],m.timestamp)+1;m.received=true;record(p,"Receive",`${m.name} from ${m.from}`,clocks[p])}
+ internal("P1","A");const m1=send("P1","P2","M1");internal("P3","B");const m2=send("P3","P1","M2");receive("P2",m1);internal("P2","C");receive("P1",m2);internal("P3","D");const m3=send("P2","P3","M3");receive("P3",m3);
+ render();showStatus("Sample demonstration loaded: 10 events across P1, P2 and P3.",false);
+}
+$("eventType").addEventListener("change",updateControls);
+$("process").addEventListener("change",refreshPending);
+$("addBtn").addEventListener("click",addEvent);
+$("sampleBtn").addEventListener("click",sample);
+$("resetBtn").addEventListener("click",reset);
+updateControls();render();
+</script>
+</body>
+</html>
